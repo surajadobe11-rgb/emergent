@@ -15,6 +15,9 @@ from routes.assets import router as assets_router
 from routes.reconciliation import router as reconciliation_router
 from routes.reports import router as reports_router
 from routes.settings import router as settings_router
+from routes.clients import router as clients_router
+from routes.export_routes import router as export_router
+from routes.gst import router as gst_router
 from seed import seed_all
 
 ROOT_DIR = Path(__file__).parent
@@ -35,6 +38,9 @@ api_router.include_router(assets_router, prefix="/assets", tags=["assets"])
 api_router.include_router(reconciliation_router, prefix="/reconciliation", tags=["reconciliation"])
 api_router.include_router(reports_router, prefix="/reports", tags=["reports"])
 api_router.include_router(settings_router, prefix="/settings", tags=["settings"])
+api_router.include_router(clients_router, prefix="/clients", tags=["clients"])
+api_router.include_router(export_router, prefix="/export", tags=["export"])
+api_router.include_router(gst_router, prefix="/gst", tags=["gst"])
 
 
 @api_router.get("/health")

@@ -12,9 +12,11 @@ import Reconciliation from "@/pages/Reconciliation";
 import TrialBalance from "@/pages/reports/TrialBalance";
 import ProfitLoss from "@/pages/reports/ProfitLoss";
 import BalanceSheet from "@/pages/reports/BalanceSheet";
+import GSTReports from "@/pages/reports/GSTReports";
 import Settings from "@/pages/Settings";
+import Clients from "@/pages/Clients";
 
-function ProtectedRoute({ children }) {
+function ProtectedRoute({ children, adminOnly = false }) {
   const { user, loading } = useAuth();
   if (loading) return (
     <div className="min-h-screen bg-app flex items-center justify-center">
@@ -22,6 +24,7 @@ function ProtectedRoute({ children }) {
     </div>
   );
   if (!user) return <Navigate to="/login" replace />;
+  if (adminOnly && user.role !== 'admin') return <Navigate to="/dashboard" replace />;
   return <Layout>{children}</Layout>;
 }
 
@@ -39,6 +42,8 @@ function AppRoutes() {
       <Route path="/reports/trial-balance" element={<ProtectedRoute><TrialBalance /></ProtectedRoute>} />
       <Route path="/reports/profit-loss" element={<ProtectedRoute><ProfitLoss /></ProtectedRoute>} />
       <Route path="/reports/balance-sheet" element={<ProtectedRoute><BalanceSheet /></ProtectedRoute>} />
+      <Route path="/reports/gst" element={<ProtectedRoute><GSTReports /></ProtectedRoute>} />
+      <Route path="/clients" element={<ProtectedRoute adminOnly><Clients /></ProtectedRoute>} />
       <Route path="/settings" element={<ProtectedRoute><Settings /></ProtectedRoute>} />
       <Route path="/" element={<Navigate to="/dashboard" replace />} />
       <Route path="*" element={<Navigate to="/dashboard" replace />} />

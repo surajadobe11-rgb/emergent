@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import api from '@/services/api';
+import { useAuth } from '@/contexts/AuthContext';
 import { Plus, X, Check } from 'lucide-react';
 
 const fmt = (n) => new Intl.NumberFormat('en-IN', { style: 'currency', currency: 'INR', maximumFractionDigits: 2 }).format(n || 0);
@@ -129,6 +130,8 @@ function CreateJournalModal({ onClose, onSuccess }) {
 }
 
 export default function Journals() {
+  const { user } = useAuth();
+  const canWrite = user?.role !== 'viewer';
   const [data, setData] = useState({ items: [], total: 0 });
   const [page, setPage] = useState(1);
   const [showCreate, setShowCreate] = useState(false);
@@ -156,7 +159,7 @@ export default function Journals() {
           <h1 className="page-header">Journal Entries</h1>
           <p className="text-sm text-slate-500 mt-0.5">{data.total} entries — Double-entry bookkeeping</p>
         </div>
-        <button onClick={() => setShowCreate(true)} className="btn-primary" data-testid="create-journal-btn">
+        <button onClick={() => setShowCreate(true)} className="btn-primary" data-testid="create-journal-btn" style={{ display: canWrite ? '' : 'none' }}>
           <Plus size={14} /> New Entry
         </button>
       </div>

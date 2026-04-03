@@ -125,8 +125,8 @@ def trial_balance_pdf(data: dict, company: str) -> bytes:
         for acc in items:
             pdf.table_row(
                 [acc["account_code"], acc["account_name"],
-                 _inr(acc["debit"]) if acc["debit"] > 0 else "—",
-                 _inr(acc["credit"]) if acc["credit"] > 0 else "—"],
+                 _inr(acc["debit"]) if acc["debit"] > 0 else "-",
+                 _inr(acc["credit"]) if acc["credit"] > 0 else "-"],
                 widths,
                 fills=["C", "L", "R", "R"],
                 colors=[INDIGO, None,
@@ -147,7 +147,7 @@ def trial_balance_pdf(data: dict, company: str) -> bytes:
 
 def profit_loss_pdf(data: dict, company: str) -> bytes:
     pdf = FinPDF(company, "Profit & Loss Statement",
-                 f"Period: {data.get('from_date','—')} to {data.get('to_date','—')}")
+                 f"Period: {data.get('from_date','start')} to {data.get('to_date','today')}")
     pdf.add_page()
 
     widths = [18, 100, 64]
@@ -181,7 +181,7 @@ def profit_loss_pdf(data: dict, company: str) -> bytes:
 # ── Balance Sheet PDF ─────────────────────────────────────────────────────────
 
 def balance_sheet_pdf(data: dict, company: str) -> bytes:
-    pdf = FinPDF(company, "Balance Sheet", f"As of: {data.get('as_of','—')}")
+    pdf = FinPDF(company, "Balance Sheet", f"As of: {data.get('as_of','today')}")
     pdf.add_page()
 
     widths = [18, 100, 64]
@@ -203,7 +203,7 @@ def balance_sheet_pdf(data: dict, company: str) -> bytes:
     section("Assets", data["assets"], data["total_assets"], INDIGO)
     section("Liabilities", data["liabilities"], data["total_liabilities"], RED)
 
-    eq_items = data["equity"] + [{"account_code": "NET", "account_name": "Net Profit / (Loss)",
+    eq_items = data["equity"] + [{"account_code": "NET", "account_name": "Net Profit / Loss",
                                    "balance": data["net_profit"]}]
     section("Equity", eq_items, data["total_equity"], GREEN)
     return bytes(pdf.output())
@@ -212,8 +212,8 @@ def balance_sheet_pdf(data: dict, company: str) -> bytes:
 # ── GSTR-1 PDF ────────────────────────────────────────────────────────────────
 
 def gstr1_pdf(data: dict, company: str) -> bytes:
-    pdf = FinPDF(company, "GSTR-1 — Outward Supplies",
-                 f"Period: {data.get('period','—')}")
+    pdf = FinPDF(company, "GSTR-1 - Outward Supplies",
+                 f"Period: {data.get('period', 'All periods')}")
     pdf.add_page()
 
     widths = [24, 60, 30, 20, 22, 22, 14]
@@ -390,7 +390,7 @@ def balance_sheet_excel(data: dict, company: str) -> bytes:
     ws.column_dimensions["B"].width = 40
     ws.column_dimensions["C"].width = 22
 
-    _xl_title(ws, company, "Balance Sheet", f"As of: {data.get('as_of','—')}", 3)
+    _xl_title(ws, company, "Balance Sheet", f"As of: {data.get('as_of','today')}", 3)
     _xl_header(ws, 5, ["Account Code", "Account Name", "Balance (INR)"])
 
     row = 6
@@ -430,8 +430,8 @@ def gstr1_excel(data: dict, company: str) -> bytes:
     for col, w in zip("ABCDEFG", [14, 50, 18, 10, 16, 16, 16]):
         ws.column_dimensions[col].width = w
 
-    _xl_title(ws, company, "GSTR-1 — Outward Supplies",
-              f"Period: {data.get('period','—')}", 7)
+    _xl_title(ws, company, "GSTR-1 - Outward Supplies",
+              f"Period: {data.get('period', 'All periods')}", 7)
     _xl_header(ws, 5, ["Date", "Description", "Taxable Value", "GST%",
                         "CGST", "SGST", "IGST"])
 

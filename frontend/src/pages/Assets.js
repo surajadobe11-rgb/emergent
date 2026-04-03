@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import api from '@/services/api';
+import { useAuth } from '@/contexts/AuthContext';
 import { Plus, RefreshCw, X, Calculator } from 'lucide-react';
 
 const fmt = (n) => new Intl.NumberFormat('en-IN', { style: 'currency', currency: 'INR', maximumFractionDigits: 0 }).format(n || 0);
@@ -102,6 +103,8 @@ function AddAssetModal({ onClose, onSuccess }) {
 }
 
 export default function Assets() {
+  const { user } = useAuth();
+  const canWrite = user?.role !== 'viewer';
   const [assets, setAssets] = useState([]);
   const [loading, setLoading] = useState(true);
   const [showAdd, setShowAdd] = useState(false);
@@ -143,7 +146,7 @@ export default function Assets() {
           <h1 className="page-header">Fixed Assets</h1>
           <p className="text-sm text-slate-500 mt-0.5">{assets.length} assets registered</p>
         </div>
-        <button onClick={() => setShowAdd(true)} className="btn-primary" data-testid="add-asset-btn">
+        <button onClick={() => setShowAdd(true)} className="btn-primary" data-testid="add-asset-btn" style={{ display: canWrite ? '' : 'none' }}>
           <Plus size={14} /> Add Asset
         </button>
       </div>

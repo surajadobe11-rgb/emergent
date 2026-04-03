@@ -48,10 +48,12 @@ async def gstr1_report(
     total_taxable = total_cgst = total_sgst = total_igst = 0.0
 
     for t in raw_txns:
-        # Back-calculate taxable value assuming amount is inclusive of 18% GST
-        taxable = round(t["amount"] / 1.18, 2)
-        cgst = round(taxable * 0.09, 2)
-        sgst = round(taxable * 0.09, 2)
+        # Use per-transaction gst_rate if tagged, else default 18%
+        txn_gst_rate = t.get("gst_rate") or gst_rate
+        divisor = 1 + (txn_gst_rate / 100)
+        taxable = round(t["amount"] / divisor, 2)
+        cgst = round(taxable * (txn_gst_rate / 200), 2)
+        sgst = round(taxable * (txn_gst_rate / 200), 2)
         igst = 0.0
         gross = round(taxable + cgst + sgst + igst, 2)
 
@@ -69,7 +71,7 @@ async def gstr1_report(
             "narration": t["narration"],
             "category": t.get("category", ""),
             "taxable_value": taxable,
-            "gst_rate": gst_rate,
+            "gst_rate": txn_gst_rate,
             "cgst": cgst,
             "sgst": sgst,
             "igst": igst,
@@ -135,8 +137,16 @@ async def gstr3b_report(
     out_cursor = db.transactions.find(out_q, {"_id": 0})
     out_txns = await out_cursor.to_list(500)
 
-    total_outward_taxable = sum(round(t["amount"] / 1.18, 2) for t in out_txns)
-    total_outward_tax = round(total_outward_taxable * 0.18, 2)
+    total_outward_taxable = 0.0
+    total_outward_tax = 0.0
+    for t in out_txns:
+        r = t.get("gst_rate") or 18.0
+        divisor = 1 + r / 100
+        taxable = round(t["amount"] / divisor, 2)
+        total_outward_taxable += taxable
+        total_outward_tax += round(taxable * r / 100, 2)
+    total_outward_taxable = round(total_outward_taxable, 2)
+    total_outward_tax = round(total_outward_tax, 2)
     cgst_out = round(total_outward_tax / 2, 2)
     sgst_out = round(total_outward_tax / 2, 2)
 
@@ -145,8 +155,16 @@ async def gstr3b_report(
     in_cursor = db.transactions.find(in_q, {"_id": 0})
     in_txns = await in_cursor.to_list(500)
 
-    total_inward_taxable = sum(round(t["amount"] / 1.18, 2) for t in in_txns)
-    total_itc = round(total_inward_taxable * 0.18, 2)
+    total_inward_taxable = 0.0
+    total_itc = 0.0
+    for t in in_txns:
+        r = t.get("gst_rate") or 18.0
+        divisor = 1 + r / 100
+        taxable = round(t["amount"] / divisor, 2)
+        total_inward_taxable += taxable
+        total_itc += round(taxable * r / 100, 2)
+    total_inward_taxable = round(total_inward_taxable, 2)
+    total_itc = round(total_itc, 2)
     cgst_itc = round(total_itc / 2, 2)
     sgst_itc = round(total_itc / 2, 2)
 

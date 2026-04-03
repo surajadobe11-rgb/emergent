@@ -1,0 +1,41 @@
+{
+  "summary": "Full test of new features: Clients CRUD, Client Switcher, PDF/Excel Exports, GST Reports (GSTR-1/GSTR-3B), and RBAC. 20/21 backend tests passed initially; 1 bug found and fixed (GSTR-1 PDF em-dash encoding error). All 21 backend tests now pass. All frontend UI tests pass.",
+  "backend_issues": {
+    "critical": [],
+    "minor": [
+      {
+        "endpoint": "/api/export/gstr1?format=pdf",
+        "issue": "Em-dash character '—' in FinPDF title caused FPDFUnicodeEncodingException with Helvetica font. Fixed by replacing all em-dashes with hyphens in export_utils.py",
+        "status": "FIXED"
+      }
+    ]
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": [
+      {
+        "screen": "GST Reports period input",
+        "issues": ["Period input field shows browser default date picker (-------) instead of a styled component - minor cosmetic issue"]
+      }
+    ]
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_new_features.py",
+    "/app/test_reports/pytest/pytest_new_features.xml"
+  ],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "export_utils.py uses Helvetica font which doesn't support Unicode characters like em-dash. Consider using a Unicode font or sanitizing all text in PDF generation",
+    "CORS is configured with allow_origins=['*'] and allow_credentials=False - should use explicit origins for production security",
+    "GST disclaimer note still says 'flat 18%' even though per-transaction rates are now supported - should update disclaimer text"
+  ],
+  "updated_files": ["/app/backend/export_utils.py", "/app/backend/tests/test_new_features.py"],
+  "success_rate": {"backend": "100% (21/21 after fix)", "frontend": "100%"},
+  "test_credentials": "Admin: admin@acme.com/admin123, Accountant: accountant@acme.com/account123",
+  "seed_data_creation": "Created 2 test clients via backend tests and 1 via UI (TEST_New Client Ltd, TEST_Verify Client, UI Test Client) - TEST_ clients may still exist in DB",
+  "retest_needed": false,
+  "should_main_agent_self_test": false,
+  "context_for_next_testing_agent": "All new features tested: Client CRUD (admin-only), client switcher in sidebar, PDF/Excel exports for Trial Balance/P&L/Balance Sheet/GSTR-1, GST Reports (GSTR-1 with per-tx rates, GSTR-3B with table 3.1 + table 4), RBAC (accountant lacks Clients nav, no client switcher; but has upload/classify access). One bug fixed: em-dash in PDF titles. Viewer role not fully tested (no seed viewer user). Test client IDs from previous run may still exist.",
+  "rca_of_issue": "GSTR-1 PDF export failed with FPDFUnicodeEncodingException because export_utils.py used em-dash '—' in PDF title strings ('GSTR-1 — Outward Supplies') and fallback values ('—'). The fpdf2 library with Helvetica font only supports Latin-1 charset. Fix: replaced all em-dashes with ASCII hyphens in export_utils.py lines 150, 184, 216, 393, 433."
+}

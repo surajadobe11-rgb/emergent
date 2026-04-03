@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import api from '@/services/api';
+import { useAuth } from '@/contexts/AuthContext';
 import { Upload, Zap, Search, Filter, ChevronLeft, ChevronRight, X } from 'lucide-react';
 
 const fmt = (n) => new Intl.NumberFormat('en-IN', { style: 'currency', currency: 'INR', maximumFractionDigits: 0 }).format(n || 0);
@@ -191,7 +192,7 @@ function UploadModal({ onClose, onSuccess }) {
 }
 
 function ClassifyModal({ txn, categories, onClose, onSuccess }) {
-  const [form, setForm] = useState({ category: txn.category || '', account_code: txn.account_code || '', account_name: txn.account_name || '' });
+  const [form, setForm] = useState({ category: txn.category || '', account_code: txn.account_code || '', account_name: txn.account_name || '', gst_rate: txn.gst_rate ?? null });
   const [loading, setLoading] = useState(false);
 
   const handleSave = async () => {
@@ -219,6 +220,15 @@ function ClassifyModal({ txn, categories, onClose, onSuccess }) {
     { code: '1100', name: 'Fixed Assets', category: 'Asset Purchase' },
   ];
 
+  const GST_RATES = [
+    { label: 'Not Applicable', value: null },
+    { label: '0% (Exempt)', value: 0 },
+    { label: '5%', value: 5 },
+    { label: '12%', value: 12 },
+    { label: '18% (Standard)', value: 18 },
+    { label: '28% (Luxury)', value: 28 },
+  ];
+
   return (
     <div className="modal-overlay" onClick={e => e.target === e.currentTarget && onClose()}>
       <div className="modal-box">
@@ -236,11 +246,24 @@ function ClassifyModal({ txn, categories, onClose, onSuccess }) {
               value={form.account_code}
               onChange={e => {
                 const opt = COA_OPTIONS.find(o => o.code === e.target.value);
-                if (opt) setForm({ account_code: opt.code, account_name: opt.name, category: opt.category });
+                if (opt) setForm(f => ({ ...f, account_code: opt.code, account_name: opt.name, category: opt.category }));
               }}
             >
               <option value="">Select account...</option>
               {COA_OPTIONS.map(o => <option key={o.code} value={o.code}>{o.code} — {o.name}</option>)}
+            </select>
+          </div>
+          <div>
+            <label className="text-xs text-slate-400 mb-1.5 block">GST Rate (for GSTR-1 / GSTR-3B)</label>
+            <select
+              className="fin-input"
+              value={form.gst_rate ?? ''}
+              onChange={e => setForm(f => ({ ...f, gst_rate: e.target.value === '' ? null : Number(e.target.value) }))}
+              data-testid="gst-rate-select"
+            >
+              {GST_RATES.map(r => (
+                <option key={String(r.value)} value={r.value ?? ''}>{r.label}</option>
+              ))}
             </select>
           </div>
         </div>
@@ -257,6 +280,8 @@ function ClassifyModal({ txn, categories, onClose, onSuccess }) {
 }
 
 export default function Transactions() {
+  const { user } = useAuth();
+  const canWrite = user?.role !== 'viewer';
   const [data, setData] = useState({ items: [], total: 0, pages: 1 });
   const [page, setPage] = useState(1);
   const [search, setSearch] = useState('');
@@ -305,14 +330,18 @@ export default function Transactions() {
           <p className="text-sm text-slate-500 mt-0.5">{data.total} total transactions</p>
         </div>
         <div className="flex gap-2">
-          <button onClick={handleAIClassify} disabled={classifying} className="btn-secondary" data-testid="ai-classify-btn">
-            <Zap size={14} />
-            {classifying ? 'Classifying...' : 'AI Classify All'}
-          </button>
-          <button onClick={() => setShowUpload(true)} className="btn-primary" data-testid="upload-csv-btn">
-            <Upload size={14} />
-            Upload CSV
-          </button>
+          {canWrite && (
+            <button onClick={handleAIClassify} disabled={classifying} className="btn-secondary" data-testid="ai-classify-btn">
+              <Zap size={14} />
+              {classifying ? 'Classifying...' : 'AI Classify All'}
+            </button>
+          )}
+          {canWrite && (
+            <button onClick={() => setShowUpload(true)} className="btn-primary" data-testid="upload-csv-btn">
+              <Upload size={14} />
+              Upload CSV
+            </button>
+          )}
         </div>
       </div>
 
@@ -391,13 +420,17 @@ export default function Transactions() {
                       </span>
                     </td>
                     <td>
-                      <button
-                        onClick={() => setClassifyTxn(t)}
-                        className="text-xs text-indigo-400 hover:text-indigo-300 transition-colors"
-                        data-testid={`classify-btn-${t.id}`}
-                      >
-                        Classify
-                      </button>
+                      {canWrite ? (
+                        <button
+                          onClick={() => setClassifyTxn(t)}
+                          className="text-xs text-indigo-400 hover:text-indigo-300 transition-colors"
+                          data-testid={`classify-btn-${t.id}`}
+                        >
+                          Classify
+                        </button>
+                      ) : (
+                        <span className="text-xs text-slate-600">—</span>
+                      )}
                     </td>
                   </tr>
                 ))}

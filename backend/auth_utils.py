@@ -50,6 +50,11 @@ async def get_current_user(request: Request) -> dict:
         user["id"] = str(user["_id"])
         user["_id"] = str(user["_id"])
         user.pop("password_hash", None)
+        # Allow admins to switch active company via X-Company-ID header
+        if user.get("role") == "admin":
+            x_company = request.headers.get("X-Company-ID", "").strip()
+            if x_company:
+                user["company_id"] = x_company
         return user
     except jwt.ExpiredSignatureError:
         raise HTTPException(status_code=401, detail="Token expired")

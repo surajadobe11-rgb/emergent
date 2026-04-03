@@ -160,6 +160,7 @@ class ClassifyRequest(BaseModel):
     category: str
     account_code: str
     account_name: str
+    gst_rate: Optional[float] = None  # 0, 5, 12, 18, 28
 
 
 @router.get("")
@@ -524,6 +525,7 @@ async def classify_transaction_manual(txn_id: str, body: ClassifyRequest, reques
             "status": "classified",
             "is_ai_classified": False,
             "confidence": 1.0,
+            **({"gst_rate": body.gst_rate} if body.gst_rate is not None else {}),
         }}
     )
     if result.matched_count == 0:

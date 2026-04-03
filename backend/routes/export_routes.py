@@ -234,15 +234,17 @@ async def export_gstr1(
     total_taxable = total_cgst = total_sgst = total_igst = 0.0
 
     for t in txns:
-        taxable = round(t["amount"] / 1.18, 2)
-        cgst = round(taxable * 0.09, 2)
-        sgst = round(taxable * 0.09, 2)
+        txn_gst_rate = t.get("gst_rate") or gst_rate
+        divisor = 1 + txn_gst_rate / 100
+        taxable = round(t["amount"] / divisor, 2)
+        cgst = round(taxable * txn_gst_rate / 200, 2)
+        sgst = round(taxable * txn_gst_rate / 200, 2)
         igst = 0.0
         transactions.append({
             "date": datetime.fromisoformat(t["date"]).strftime("%d/%m/%Y") if isinstance(t["date"], str) else t["date"].strftime("%d/%m/%Y"),
             "narration": t["narration"][:50],
             "taxable_value": taxable,
-            "gst_rate": gst_rate,
+            "gst_rate": txn_gst_rate,
             "cgst": cgst, "sgst": sgst, "igst": igst,
         })
         total_taxable += taxable

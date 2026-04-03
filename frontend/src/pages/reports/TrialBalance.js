@@ -1,8 +1,41 @@
 import { useState, useEffect } from 'react';
 import api from '@/services/api';
-import { Check, X } from 'lucide-react';
+import { Check, X, FileText, Download } from 'lucide-react';
 
 const fmt = (n) => new Intl.NumberFormat('en-IN', { style: 'currency', currency: 'INR', maximumFractionDigits: 2 }).format(n || 0);
+
+async function triggerDownload(url, params, filename) {
+  const res = await api.get(url, { params, responseType: 'blob' });
+  const blobUrl = window.URL.createObjectURL(new Blob([res.data]));
+  const a = document.createElement('a');
+  a.href = blobUrl;
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  window.URL.revokeObjectURL(blobUrl);
+}
+
+function ExportButtons({ params }) {
+  const [loading, setLoading] = useState('');
+  const handleExport = async (format) => {
+    setLoading(format);
+    try {
+      const ext = format === 'pdf' ? 'pdf' : 'xlsx';
+      await triggerDownload('/export/trial-balance', { ...params, format }, `trial_balance.${ext}`);
+    } catch { alert('Export failed'); } finally { setLoading(''); }
+  };
+  return (
+    <div className="flex gap-2">
+      <button onClick={() => handleExport('pdf')} disabled={!!loading} className="btn-secondary text-xs py-1.5 px-3" data-testid="export-tb-pdf">
+        {loading === 'pdf' ? <div className="w-3 h-3 border-2 border-white/30 border-t-white rounded-full animate-spin" /> : <><FileText size={12} /> PDF</>}
+      </button>
+      <button onClick={() => handleExport('excel')} disabled={!!loading} className="btn-secondary text-xs py-1.5 px-3" data-testid="export-tb-excel">
+        {loading === 'excel' ? <div className="w-3 h-3 border-2 border-white/30 border-t-white rounded-full animate-spin" /> : <><Download size={12} /> Excel</>}
+      </button>
+    </div>
+  );
+}
 
 export default function TrialBalance() {
   const [data, setData] = useState(null);
@@ -44,7 +77,8 @@ export default function TrialBalance() {
           <h1 className="page-header">Trial Balance</h1>
           <p className="text-sm text-slate-500 mt-0.5">As of {asOf || 'all time'}</p>
         </div>
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-3 flex-wrap">
+          <ExportButtons params={asOf ? { as_of: asOf } : {}} />
           <input type="date" className="fin-input text-sm w-44" value={asOf} onChange={e => setAsOf(e.target.value)} placeholder="As of date" />
           <button onClick={fetchData} className="btn-primary" data-testid="run-report-btn">Run Report</button>
         </div>
