@@ -7,8 +7,28 @@ const fmt = (n) => new Intl.NumberFormat('en-IN', { style: 'currency', currency:
 function UploadModal({ onClose, onSuccess }) {
   const [file, setFile] = useState(null);
   const [loading, setLoading] = useState(false);
+  const [previewing, setPreviewing] = useState(false);
+  const [preview, setPreview] = useState(null);   // { headers, detected_columns, preview_rows, total_rows }
   const [result, setResult] = useState(null);
   const [error, setError] = useState('');
+
+  const handleFileSelect = async (selected) => {
+    setFile(selected);
+    setPreview(null);
+    setError('');
+    if (!selected) return;
+    setPreviewing(true);
+    try {
+      const fd = new FormData();
+      fd.append('file', selected);
+      const res = await api.post('/transactions/preview', fd, { headers: { 'Content-Type': 'multipart/form-data' } });
+      setPreview(res.data);
+    } catch (err) {
+      setError(err.response?.data?.detail || 'Could not preview file');
+    } finally {
+      setPreviewing(false);
+    }
+  };
 
   const handleUpload = async () => {
     if (!file) return;
@@ -27,43 +47,140 @@ function UploadModal({ onClose, onSuccess }) {
     }
   };
 
+  const ColTag = ({ label, value }) => value ? (
+    <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs" style={{ background: 'rgba(99,102,241,0.12)', border: '1px solid rgba(99,102,241,0.25)' }}>
+      <span className="text-slate-500">{label}:</span>
+      <span className="text-indigo-300 font-medium">{value}</span>
+    </div>
+  ) : null;
+
   return (
     <div className="modal-overlay" onClick={e => e.target === e.currentTarget && onClose()}>
-      <div className="modal-box">
+      <div className="modal-box" style={{ maxWidth: 580 }}>
         <div className="flex items-center justify-between mb-6">
           <h3 className="text-lg font-semibold text-slate-100" style={{ fontFamily: 'Work Sans, sans-serif' }}>Upload Bank Statement</h3>
           <button onClick={onClose} className="text-slate-500 hover:text-slate-300"><X size={18} /></button>
         </div>
 
         {result ? (
-          <div className="text-center py-6">
-            <div className="w-12 h-12 bg-emerald-500/20 rounded-full flex items-center justify-center mx-auto mb-3">
-              <Zap size={20} color="#10B981" />
+          /* ── Success State ── */
+          <div className="text-center py-4">
+            <div className="w-14 h-14 bg-emerald-500/15 rounded-full flex items-center justify-center mx-auto mb-4">
+              <Zap size={24} color="#10B981" />
             </div>
-            <p className="text-emerald-400 font-semibold">{result.message}</p>
-            <p className="text-slate-500 text-sm mt-1">Transactions have been auto-classified by AI</p>
-            <button onClick={onClose} className="btn-primary mt-4">Done</button>
+            <p className="text-emerald-400 font-semibold text-lg mb-1">{result.count} transactions imported!</p>
+            <div className="flex justify-center gap-4 mt-3 mb-5 text-sm">
+              <span className="text-emerald-400"><span className="font-mono font-bold">{result.classified}</span> auto-classified</span>
+              {result.unclassified > 0 && <span className="text-amber-400"><span className="font-mono font-bold">{result.unclassified}</span> need review</span>}
+              {result.skipped > 0 && <span className="text-slate-500"><span className="font-mono font-bold">{result.skipped}</span> skipped</span>}
+            </div>
+            {/* Show what columns were detected */}
+            <div className="text-left bg-slate-900/50 rounded-xl p-4 mb-5 text-xs space-y-1">
+              <p className="text-slate-500 mb-2 font-medium">Columns auto-detected from your file:</p>
+              {Object.entries(result.detected_columns || {}).filter(([, v]) => v && v !== 'not detected').map(([k, v]) => (
+                <div key={k} className="flex items-center gap-2 text-slate-400">
+                  <span className="w-16 text-slate-600 capitalize">{k}:</span>
+                  <span className="text-indigo-300">" {v} "</span>
+                </div>
+              ))}
+            </div>
+            <button onClick={onClose} className="btn-primary">Done</button>
           </div>
         ) : (
           <>
-            <p className="text-sm text-slate-400 mb-4">Upload a CSV or Excel file with columns: <span className="text-slate-300 font-mono text-xs">Date, Narration, Amount, Type</span></p>
+            <p className="text-sm text-slate-400 mb-4">
+              Upload any bank statement — columns are <span className="text-indigo-300 font-medium">auto-detected</span>. 
+              Supports HDFC, ICICI, SBI, Axis, Kotak and any CSV/Excel format.
+            </p>
 
+            {/* Drop zone */}
             <div
-              className="border-2 border-dashed border-slate-700 hover:border-indigo-500/50 rounded-xl p-8 text-center cursor-pointer transition-colors mb-4"
+              className={`border-2 border-dashed rounded-xl p-7 text-center cursor-pointer transition-all mb-4 ${file ? 'border-indigo-500/50 bg-indigo-500/5' : 'border-slate-700 hover:border-indigo-500/40'}`}
               onClick={() => document.getElementById('csv-upload').click()}
             >
-              <Upload size={28} className="mx-auto text-slate-500 mb-2" />
-              <p className="text-slate-400 text-sm">{file ? file.name : 'Click to select CSV or Excel file'}</p>
-              <p className="text-slate-600 text-xs mt-1">Supports .csv and .xlsx</p>
+              <Upload size={28} className={`mx-auto mb-2 ${file ? 'text-indigo-400' : 'text-slate-500'}`} />
+              <p className="text-slate-400 text-sm font-medium">
+                {file ? file.name : 'Click to select or drag & drop'}
+              </p>
+              <p className="text-slate-600 text-xs mt-1">Supports .csv and .xlsx — any bank format</p>
             </div>
-            <input id="csv-upload" type="file" accept=".csv,.xlsx,.xls" className="hidden" onChange={e => setFile(e.target.files[0])} />
+            <input id="csv-upload" type="file" accept=".csv,.xlsx,.xls,.txt" className="hidden"
+              onChange={e => handleFileSelect(e.target.files[0])} />
+
+            {/* Preview / Column detection */}
+            {previewing && (
+              <div className="flex items-center gap-2 text-sm text-slate-400 mb-4">
+                <div className="w-4 h-4 border-2 border-indigo-500 border-t-transparent rounded-full animate-spin" />
+                Analysing file structure...
+              </div>
+            )}
+
+            {preview && !previewing && (
+              <div className="mb-4 space-y-3">
+                <div>
+                  <p className="text-xs text-slate-500 mb-2 font-medium uppercase tracking-wider">Auto-detected columns</p>
+                  <div className="flex flex-wrap gap-2">
+                    <ColTag label="Date"     value={preview.detected_columns.date} />
+                    <ColTag label="Narration" value={preview.detected_columns.narration} />
+                    <ColTag label="Debit"    value={preview.detected_columns.debit} />
+                    <ColTag label="Credit"   value={preview.detected_columns.credit} />
+                    <ColTag label="Amount"   value={preview.detected_columns.amount} />
+                    <ColTag label="Type"     value={preview.detected_columns.type} />
+                  </div>
+                  {!preview.detected_columns.date && !preview.detected_columns.narration && (
+                    <p className="text-amber-400 text-xs mt-2">
+                      Columns not fully detected — the import will still attempt to process your file.
+                    </p>
+                  )}
+                </div>
+
+                {/* Preview rows */}
+                {preview.preview_rows?.length > 0 && (
+                  <div>
+                    <p className="text-xs text-slate-500 mb-2 font-medium uppercase tracking-wider">
+                      Preview ({preview.total_rows} total rows)
+                    </p>
+                    <div className="overflow-x-auto rounded-xl border border-white/8" style={{ maxHeight: 160 }}>
+                      <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.7rem', fontFamily: 'IBM Plex Mono' }}>
+                        <thead>
+                          <tr style={{ background: 'rgba(30,41,59,0.8)' }}>
+                            {preview.headers.map(h => (
+                              <th key={h} style={{ padding: '6px 10px', color: '#6366F1', textAlign: 'left', borderBottom: '1px solid rgba(255,255,255,0.06)', whiteSpace: 'nowrap' }}>{h}</th>
+                            ))}
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {preview.preview_rows.map((row, i) => (
+                            <tr key={i} style={{ borderBottom: '1px solid rgba(255,255,255,0.04)' }}>
+                              {preview.headers.map(h => (
+                                <td key={h} style={{ padding: '5px 10px', color: '#94A3B8', whiteSpace: 'nowrap', maxWidth: 180, overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                                  {String(row[h] || '').slice(0, 40)}
+                                </td>
+                              ))}
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
 
             {error && <p className="text-red-400 text-sm mb-3">{error}</p>}
 
             <div className="flex gap-3">
               <button onClick={onClose} className="btn-secondary flex-1">Cancel</button>
-              <button onClick={handleUpload} disabled={!file || loading} className="btn-primary flex-1 justify-center" data-testid="upload-confirm-btn">
-                {loading ? <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" /> : 'Upload & Classify'}
+              <button
+                onClick={handleUpload}
+                disabled={!file || loading || previewing}
+                className="btn-primary flex-1 justify-center"
+                data-testid="upload-confirm-btn"
+              >
+                {loading
+                  ? <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                  : <><Upload size={14} /> Import & Auto-Classify</>
+                }
               </button>
             </div>
           </>

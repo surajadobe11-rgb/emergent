@@ -1,14 +1,159 @@
 import uuid
 import io
 import csv
+import re
 from datetime import datetime, timezone
 from typing import Optional
 from fastapi import APIRouter, Request, HTTPException, UploadFile, File, Query
 from pydantic import BaseModel
 from auth_utils import get_current_user
-from ai_engine import classify_transaction, batch_classify
+from ai_engine import classify_transaction
 
 router = APIRouter()
+
+# ── Smart Column Detection ────────────────────────────────────────────────────
+
+DATE_KEYWORDS     = ['date', 'txn date', 'transaction date', 'posting date', 'value date',
+                     'tran date', 'trans date', 'entry date', 'cheque date', 'book date',
+                     'trade date', 'effective date', 'value dt', 'txn dt']
+
+NARRATION_KEYWORDS = ['narration', 'description', 'particulars', 'remarks',
+                      'transaction remarks', 'transaction description', 'details',
+                      'narrative', 'trans description', 'transaction details',
+                      'transaction particular', 'transaction narration', 'chq particulars',
+                      'trans particulars', 'beneficiary', 'merchant name']
+
+DEBIT_KEYWORDS    = ['withdrawal', 'debit', 'dr', 'debit amount', 'withdrawal amt',
+                     'debit amt', 'withdrawals', 'debit (inr)', 'withdrawal(inr)',
+                     'debit amount (inr)', 'dr amount', 'dr amt', 'amount dr',
+                     'withdrawal amount', 'payment amount']
+
+CREDIT_KEYWORDS   = ['deposit', 'credit', 'cr', 'credit amount', 'deposit amt',
+                     'credit amt', 'deposits', 'credit (inr)', 'deposit(inr)',
+                     'credit amount (inr)', 'cr amount', 'cr amt', 'amount cr',
+                     'deposit amount', 'received amount']
+
+AMOUNT_KEYWORDS   = ['amount', 'amt', 'transaction amount', 'trans amount',
+                     'net amount', 'transaction amt']
+
+TYPE_KEYWORDS     = ['type', 'dr/cr', 'cr/dr', 'transaction type', 'dr / cr',
+                     'debit/credit', 'txn type', 'mode']
+
+
+def _match(headers_lower: dict, keywords: list, exclude: str = None) -> Optional[str]:
+    """Return the first matching original header for the given keyword list."""
+    for kw in keywords:
+        for h_low, h_orig in headers_lower.items():
+            if exclude and exclude.lower() in h_low:
+                continue
+            if h_low == kw:
+                return h_orig
+    for kw in keywords:
+        for h_low, h_orig in headers_lower.items():
+            if exclude and exclude.lower() in h_low:
+                continue
+            if kw in h_low:
+                return h_orig
+    return None
+
+
+def detect_columns(headers: list) -> dict:
+    hl = {str(h).strip().lower(): str(h) for h in headers if str(h).strip()}
+    res = {}
+
+    d = _match(hl, DATE_KEYWORDS)
+    if d: res['date'] = d
+
+    n = _match(hl, NARRATION_KEYWORDS)
+    if n: res['narration'] = n
+
+    # Debit and credit — avoid picking same column for both
+    db_col = _match(hl, DEBIT_KEYWORDS, exclude='credit')
+    cr_col = _match(hl, CREDIT_KEYWORDS, exclude='debit')
+    if db_col and cr_col and db_col == cr_col:
+        cr_col = None
+    if db_col: res['debit_col'] = db_col
+    if cr_col: res['credit_col'] = cr_col
+
+    # Single amount column only when no separate debit/credit
+    if not db_col and not cr_col:
+        a = _match(hl, AMOUNT_KEYWORDS)
+        if a: res['amount_col'] = a
+        t = _match(hl, TYPE_KEYWORDS)
+        if t: res['type_col'] = t
+
+    return res
+
+
+# ── Amount / Date Parsers ─────────────────────────────────────────────────────
+
+DATE_FORMATS = [
+    "%Y-%m-%d", "%d/%m/%Y", "%d-%m-%Y", "%m/%d/%Y",
+    "%d/%m/%y", "%d-%m-%y", "%Y/%m/%d",
+    "%d %b %Y", "%d-%b-%Y", "%d %B %Y", "%d-%B-%Y",
+    "%d %b %y", "%d-%b-%y",
+    "%d.%m.%Y", "%d.%m.%y", "%b %d, %Y", "%m-%d-%Y",
+]
+
+
+def parse_date(value, fallback: datetime) -> datetime:
+    if value is None:
+        return fallback
+    s = str(value).strip().split(' ')[0] if ' ' in str(value) else str(value).strip()
+    for fmt in DATE_FORMATS:
+        try:
+            return datetime.strptime(s, fmt).replace(tzinfo=timezone.utc)
+        except ValueError:
+            continue
+    # Try the full string too
+    s_full = str(value).strip()
+    for fmt in DATE_FORMATS:
+        try:
+            return datetime.strptime(s_full, fmt).replace(tzinfo=timezone.utc)
+        except ValueError:
+            continue
+    return fallback
+
+
+def parse_amount(value) -> tuple:
+    """
+    Returns (amount: float, txn_type: str)
+    txn_type is 'debit', 'credit', or '' (unknown)
+    Handles: '1,234.56', '-5000', '5,000 CR', '50000DR', '₹12,500.00', etc.
+    """
+    if value is None:
+        return 0.0, ''
+    s = str(value).strip()
+    if s in ('', 'nan', 'None', '-', 'N/A', 'NA', 'nil', 'NIL'):
+        return 0.0, ''
+
+    # Strip currency symbols and whitespace
+    s = re.sub(r'[₹$€£\s]', '', s)
+    # Remove commas used as thousands separators
+    s = s.replace(',', '')
+
+    suffix = ''
+    if s.upper().endswith('CR'):
+        suffix = 'credit'
+        s = s[:-2]
+    elif s.upper().endswith('DR'):
+        suffix = 'debit'
+        s = s[:-2]
+
+    # Remove parentheses (some banks use (500) for negative)
+    if s.startswith('(') and s.endswith(')'):
+        s = '-' + s[1:-1]
+
+    try:
+        amount = float(s)
+    except ValueError:
+        return 0.0, ''
+
+    if amount < 0:
+        return abs(amount), 'debit'
+    if amount == 0:
+        return 0.0, ''
+    return amount, suffix  # suffix may be '' = unknown
 
 
 class ClassifyRequest(BaseModel):
@@ -55,6 +200,66 @@ async def list_transactions(
     return {"items": items, "total": total, "page": page, "limit": limit, "pages": (total + limit - 1) // limit}
 
 
+def _read_file(content: bytes, filename: str) -> list:
+    """Parse CSV or Excel into a list of row dicts."""
+    fname = filename.lower()
+    if fname.endswith(".csv") or fname.endswith(".txt"):
+        for enc in ('utf-8-sig', 'utf-8', 'latin-1', 'cp1252'):
+            try:
+                text = content.decode(enc)
+                break
+            except UnicodeDecodeError:
+                continue
+        # Detect delimiter
+        sample = text[:2048]
+        dialect = csv.Sniffer().sniff(sample, delimiters=',\t;|')
+        reader = csv.DictReader(io.StringIO(text), dialect=dialect)
+        return list(reader)
+    else:
+        import pandas as pd
+        # Auto-detect header row in Excel (skip bank logo/title rows)
+        raw = pd.read_excel(io.BytesIO(content), header=None, dtype=str)
+        raw = raw.fillna('')
+        header_idx = 0
+        for i, row in raw.iterrows():
+            non_empty = sum(1 for v in row if str(v).strip())
+            if non_empty >= 3:
+                header_idx = i
+                break
+        df = pd.read_excel(io.BytesIO(content), header=header_idx, dtype=str)
+        df = df.fillna('')
+        return df.to_dict(orient='records')
+
+
+@router.post("/preview")
+async def preview_statement(request: Request, file: UploadFile = File(...)):
+    """Return detected column mapping + first 5 rows without importing."""
+    await get_current_user(request)
+    content = await file.read()
+    try:
+        rows = _read_file(content, file.filename)
+        if not rows:
+            return {"headers": [], "detected_columns": {}, "preview_rows": [], "total_rows": 0}
+        headers = [str(h) for h in rows[0].keys()]
+        cols = detect_columns(headers)
+        preview = [{str(h): str(r.get(h, '')) for h in headers} for r in rows[:5]]
+        return {
+            "headers": headers,
+            "detected_columns": {
+                "date":     cols.get('date', ''),
+                "narration": cols.get('narration', ''),
+                "debit":    cols.get('debit_col', ''),
+                "credit":   cols.get('credit_col', ''),
+                "amount":   cols.get('amount_col', ''),
+                "type":     cols.get('type_col', ''),
+            },
+            "preview_rows": preview,
+            "total_rows": len(rows),
+        }
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+
 @router.post("/upload")
 async def upload_bank_statement(request: Request, file: UploadFile = File(...)):
     user = await get_current_user(request)
@@ -64,64 +269,131 @@ async def upload_bank_statement(request: Request, file: UploadFile = File(...)):
     content = await file.read()
     now = datetime.now(timezone.utc)
     transactions = []
+    skipped = 0
 
     try:
-        if file.filename.endswith(".csv"):
-            text = content.decode("utf-8-sig")
-            reader = csv.DictReader(io.StringIO(text))
-            rows = list(reader)
-        else:
-            import pandas as pd
-            df = pd.read_excel(io.BytesIO(content))
-            rows = df.to_dict(orient="records")
+        rows = _read_file(content, file.filename)
+        if not rows:
+            raise HTTPException(status_code=400, detail="File is empty or has no data rows")
+
+        headers = list(rows[0].keys())
+        cols = detect_columns(headers)
+
+        # Friendly error if nothing detected
+        if not cols.get('date') and not cols.get('narration') and not cols.get('debit_col') and not cols.get('amount_col'):
+            raise HTTPException(
+                status_code=400,
+                detail=f"Could not auto-detect columns from headers: {headers}. "
+                       f"Expected columns like: Date, Narration/Description, Debit/Credit or Amount/Type."
+            )
 
         for row in rows:
-            # Support multiple column name formats
-            keys = {k.strip().lower(): v for k, v in row.items()}
-            date_str = str(keys.get("date", keys.get("txn_date", keys.get("transaction_date", "")))).strip()
-            narration = str(keys.get("narration", keys.get("description", keys.get("particulars", "")))).strip()
-            amount_str = str(keys.get("amount", keys.get("credit", keys.get("debit", "0")))).replace(",", "").strip()
-            txn_type = str(keys.get("type", keys.get("dr/cr", "debit"))).strip().lower()
+            # ── Date ──────────────────────────────────────────────
+            date_raw = row.get(cols.get('date', ''), '') if cols.get('date') else ''
+            date = parse_date(date_raw, now)
 
-            if not date_str or not narration:
+            # ── Narration ─────────────────────────────────────────
+            narration = ''
+            if cols.get('narration'):
+                narration = str(row.get(cols['narration'], '')).strip()
+            if not narration or narration in ('nan', 'None'):
+                # Fallback: pick first string column with 4+ chars
+                for h in headers:
+                    v = str(row.get(h, '')).strip()
+                    if len(v) >= 4 and not re.match(r'^[\d,.\-/ ]+$', v):
+                        narration = v
+                        break
+            if not narration or narration in ('nan', 'None'):
+                skipped += 1
                 continue
 
-            try:
-                amount = float(amount_str) if amount_str else 0.0
-            except ValueError:
-                amount = 0.0
+            # ── Amount & Type ──────────────────────────────────────
+            amount, txn_type = 0.0, ''
 
-            try:
-                date = datetime.strptime(date_str, "%Y-%m-%d").replace(tzinfo=timezone.utc)
-            except ValueError:
-                try:
-                    date = datetime.strptime(date_str, "%d/%m/%Y").replace(tzinfo=timezone.utc)
-                except ValueError:
-                    date = now
+            if cols.get('debit_col') or cols.get('credit_col'):
+                # Separate debit / credit columns (HDFC, ICICI, SBI style)
+                d_raw = row.get(cols.get('debit_col', ''), '') if cols.get('debit_col') else ''
+                c_raw = row.get(cols.get('credit_col', ''), '') if cols.get('credit_col') else ''
+                d_amt, _ = parse_amount(d_raw)
+                c_amt, _ = parse_amount(c_raw)
+                if d_amt > 0:
+                    amount, txn_type = d_amt, 'debit'
+                elif c_amt > 0:
+                    amount, txn_type = c_amt, 'credit'
+                else:
+                    skipped += 1
+                    continue
 
+            elif cols.get('amount_col'):
+                # Single amount column + optional type column
+                a_raw = row.get(cols['amount_col'], '')
+                amount, inferred = parse_amount(a_raw)
+                if amount == 0:
+                    skipped += 1
+                    continue
+                if inferred:
+                    txn_type = inferred
+                elif cols.get('type_col'):
+                    t_raw = str(row.get(cols['type_col'], '')).strip().lower()
+                    txn_type = 'credit' if any(x in t_raw for x in ['cr', 'credit', 'c', 'deposit', 'd']) else 'debit'
+                else:
+                    txn_type = 'debit'
+
+            else:
+                # Last resort — scan all numeric columns
+                for h in headers:
+                    if h in (cols.get('date', ''), cols.get('narration', '')):
+                        continue
+                    v = row.get(h, '')
+                    amt, inferred = parse_amount(v)
+                    if amt > 0:
+                        amount, txn_type = amt, inferred or 'debit'
+                        break
+                if amount == 0:
+                    skipped += 1
+                    continue
+
+            # ── AI Classify ───────────────────────────────────────
             category, account_code, account_name, confidence = classify_transaction(narration, amount)
 
             transactions.append({
-                "id": str(uuid.uuid4()),
-                "company_id": company_id,
-                "date": date,
-                "narration": narration,
-                "amount": abs(amount),
-                "type": txn_type if txn_type in ["credit", "debit"] else "debit",
-                "category": category,
-                "account_code": account_code,
-                "account_name": account_name,
-                "confidence": confidence,
+                "id":             str(uuid.uuid4()),
+                "company_id":     company_id,
+                "date":           date,
+                "narration":      narration,
+                "amount":         round(amount, 2),
+                "type":           txn_type,
+                "category":       category,
+                "account_code":   account_code,
+                "account_name":   account_name,
+                "confidence":     confidence,
                 "is_ai_classified": True,
-                "status": "classified" if category != "Unclassified" else "unclassified",
-                "created_at": now,
+                "status":         "classified" if category != "Unclassified" else "unclassified",
+                "created_at":     now,
             })
 
         if transactions:
             await db.transactions.insert_many(transactions)
 
-        return {"message": f"Imported {len(transactions)} transactions", "count": len(transactions)}
+        classified = sum(1 for t in transactions if t['status'] == 'classified')
+        return {
+            "message": f"Imported {len(transactions)} transactions ({classified} auto-classified)",
+            "count": len(transactions),
+            "classified": classified,
+            "unclassified": len(transactions) - classified,
+            "skipped": skipped,
+            "detected_columns": {
+                "date":     cols.get('date', 'not detected'),
+                "narration": cols.get('narration', 'not detected'),
+                "debit":    cols.get('debit_col', ''),
+                "credit":   cols.get('credit_col', ''),
+                "amount":   cols.get('amount_col', ''),
+                "type":     cols.get('type_col', ''),
+            },
+        }
 
+    except HTTPException:
+        raise
     except Exception as e:
         raise HTTPException(status_code=400, detail=f"Failed to parse file: {str(e)}")
 
