@@ -192,8 +192,8 @@ async def gstr3b_report(
         },
         "net_tax_liability": net_tax_liability,
         "notes": [
-            "GST calculated at flat 18% (CGST 9% + SGST 9%) for all line items.",
-            "Amounts shown are back-calculated from inclusive transaction amounts.",
+            "GST calculated per transaction at tagged rate (0%/5%/12%/18%/28%). Default 18% for untagged transactions.",
+            "Amounts back-calculated from inclusive transaction amounts.",
             "This report is indicative. Verify with your CA before filing."
         ],
     }
