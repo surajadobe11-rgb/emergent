@@ -28,7 +28,11 @@ const navItems = [
 
 function NavItem({ item, collapsed }) {
   const location = useLocation();
-  const [open, setOpen] = useState(item.children?.some(c => location.pathname === c.path));
+  const isAnyChildActive = item.children?.some(c => location.pathname === c.path);
+  const [open, setOpen] = useState(isAnyChildActive);
+
+  // Keep open if navigating between child routes
+  useState(() => { if (isAnyChildActive) setOpen(true); });
   const isActive = item.path ? location.pathname === item.path : item.children?.some(c => location.pathname === c.path);
 
   if (item.children) {
