@@ -90,7 +90,7 @@ function UploadModal({ onClose, onSuccess }) {
           <>
             <p className="text-sm text-slate-400 mb-4">
               Upload any bank statement — columns are <span className="text-indigo-300 font-medium">auto-detected</span>. 
-              Supports HDFC, ICICI, SBI, Axis, Kotak and any CSV/Excel format.
+              Supports HDFC, ICICI, SBI, Axis, Kotak and any CSV / Excel / <span className="text-indigo-300 font-medium">PDF</span> format.
             </p>
 
             {/* Drop zone */}
@@ -102,9 +102,9 @@ function UploadModal({ onClose, onSuccess }) {
               <p className="text-slate-400 text-sm font-medium">
                 {file ? file.name : 'Click to select or drag & drop'}
               </p>
-              <p className="text-slate-600 text-xs mt-1">Supports .csv and .xlsx — any bank format</p>
+              <p className="text-slate-600 text-xs mt-1">Supports .csv, .xlsx and .pdf — any bank format</p>
             </div>
-            <input id="csv-upload" type="file" accept=".csv,.xlsx,.xls,.txt" className="hidden"
+            <input id="csv-upload" type="file" accept=".csv,.xlsx,.xls,.txt,.pdf" className="hidden"
               onChange={e => handleFileSelect(e.target.files[0])} />
 
             {/* Preview / Column detection */}

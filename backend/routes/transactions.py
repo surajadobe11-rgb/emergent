@@ -200,24 +200,135 @@ async def list_transactions(
     return {"items": items, "total": total, "page": page, "limit": limit, "pages": (total + limit - 1) // limit}
 
 
+def _read_pdf(content: bytes) -> list:
+    """
+    Extract transaction rows from a bank statement PDF using pdfplumber.
+    Handles multi-page PDFs, auto-detects the transaction table, and
+    preserves the header from page 1 across all subsequent pages.
+    Falls back to text-line parsing when no tables are found.
+    """
+    import pdfplumber
+
+    all_rows: list = []
+    headers: list = []
+
+    with pdfplumber.open(io.BytesIO(content)) as pdf:
+        for page_num, page in enumerate(pdf.pages):
+            tables = page.extract_tables({
+                "vertical_strategy": "lines",
+                "horizontal_strategy": "lines",
+                "snap_tolerance": 5,
+                "join_tolerance": 3,
+            })
+
+            # Fallback: try text strategy when line strategy returns nothing
+            if not tables:
+                tables = page.extract_tables({
+                    "vertical_strategy": "text",
+                    "horizontal_strategy": "text",
+                })
+
+            for table in tables:
+                if not table or len(table) < 2:
+                    continue
+
+                # Clean each cell
+                clean = [[str(c or '').replace('\n', ' ').strip() for c in row]
+                         for row in table]
+
+                if not headers:
+                    # Find the header row: first row whose text hints at transaction columns
+                    for i, row in enumerate(clean):
+                        row_text = ' '.join(row).lower()
+                        if any(k in row_text for k in
+                               ['date', 'narration', 'description', 'debit',
+                                'credit', 'withdrawal', 'deposit', 'amount',
+                                'particulars', 'remarks', 'balance']):
+                            headers = row
+                            data_rows = clean[i + 1:]
+                            break
+                    else:
+                        continue          # no recognisable header in this table
+                else:
+                    # Subsequent pages: the same table layout, data starts at row 0
+                    # unless the first row looks like a repeat of the header
+                    first = clean[0]
+                    if first and any(str(h).lower() == str(first[0]).lower()
+                                     for h in headers[:2]):
+                        data_rows = clean[1:]    # skip repeated header
+                    else:
+                        data_rows = clean
+
+                for row in data_rows:
+                    if not any(c for c in row):
+                        continue
+                    # Pad / trim to match header length
+                    padded = (row + [''] * len(headers))[:len(headers)]
+                    row_dict = {headers[j]: padded[j] for j in range(len(headers))}
+                    all_rows.append(row_dict)
+
+    if all_rows:
+        return all_rows
+
+    # ── Fallback: text-line heuristic (for PDFs with no extractable tables) ──
+    with pdfplumber.open(io.BytesIO(content)) as pdf:
+        full_text = '\n'.join(page.extract_text() or '' for page in pdf.pages)
+
+    lines = [l.strip() for l in full_text.splitlines() if l.strip()]
+    if not lines:
+        return []
+
+    # Try to find a header line
+    header_idx = None
+    for i, line in enumerate(lines):
+        ll = line.lower()
+        if sum(1 for k in ['date', 'description', 'narration', 'amount',
+                            'debit', 'credit', 'balance'] if k in ll) >= 2:
+            header_idx = i
+            break
+
+    if header_idx is None:
+        return []
+
+    # Use whitespace splitting — works for fixed-width PDFs
+    raw_headers = lines[header_idx].split()
+    date_re = re.compile(r'\d{1,2}[-/]\w{2,3}[-/]\d{2,4}|\d{2,4}[-/]\d{2}[-/]\d{2,4}')
+
+    for line in lines[header_idx + 1:]:
+        if not date_re.search(line):
+            continue
+        parts = line.split()
+        row_dict = {raw_headers[j]: parts[j] if j < len(parts) else ''
+                    for j in range(len(raw_headers))}
+        all_rows.append(row_dict)
+
+    return all_rows
+
+
 def _read_file(content: bytes, filename: str) -> list:
-    """Parse CSV or Excel into a list of row dicts."""
+    """Parse CSV, Excel, or PDF into a list of row dicts."""
     fname = filename.lower()
-    if fname.endswith(".csv") or fname.endswith(".txt"):
+
+    if fname.endswith('.pdf'):
+        return _read_pdf(content)
+
+    if fname.endswith('.csv') or fname.endswith('.txt'):
         for enc in ('utf-8-sig', 'utf-8', 'latin-1', 'cp1252'):
             try:
                 text = content.decode(enc)
                 break
             except UnicodeDecodeError:
                 continue
-        # Detect delimiter
         sample = text[:2048]
-        dialect = csv.Sniffer().sniff(sample, delimiters=',\t;|')
+        try:
+            dialect = csv.Sniffer().sniff(sample, delimiters=',\t;|')
+        except csv.Error:
+            dialect = csv.excel
         reader = csv.DictReader(io.StringIO(text), dialect=dialect)
         return list(reader)
-    else:
+
+    else:  # Excel
         import pandas as pd
-        # Auto-detect header row in Excel (skip bank logo/title rows)
         raw = pd.read_excel(io.BytesIO(content), header=None, dtype=str)
         raw = raw.fillna('')
         header_idx = 0
