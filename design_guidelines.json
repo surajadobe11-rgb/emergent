@@ -1,0 +1,137 @@
+{
+  "theme": "dark",
+  "archetype": "Archetype 4 (Swiss & High-Contrast) - Dark Variant",
+  "typography": {
+    "heading_font": "Work Sans",
+    "body_font": "IBM Plex Sans",
+    "data_font": "IBM Plex Mono",
+    "hierarchy": {
+      "h1": "text-4xl sm:text-5xl tracking-tight font-semibold text-slate-50",
+      "h2": "text-2xl sm:text-3xl tracking-tight font-medium text-slate-100",
+      "h3": "text-xl sm:text-2xl tracking-tight font-medium text-slate-100",
+      "h4": "text-lg sm:text-xl font-medium text-slate-200",
+      "body": "text-base leading-relaxed text-slate-300",
+      "small": "text-sm text-slate-400",
+      "overline": "text-xs font-bold uppercase tracking-[0.2em] text-indigo-400"
+    }
+  },
+  "colors": {
+    "background": {
+      "app": "#0B0F19",
+      "card": "rgba(17, 24, 39, 0.6)",
+      "card_hover": "rgba(30, 41, 59, 0.8)",
+      "glass": "rgba(11, 15, 25, 0.7)"
+    },
+    "text": {
+      "primary": "#F8FAFC",
+      "secondary": "#94A3B8",
+      "muted": "#475569",
+      "inverse": "#0B0F19"
+    },
+    "border": {
+      "default": "rgba(255, 255, 255, 0.1)",
+      "focus": "#6366F1"
+    },
+    "accent": {
+      "primary": "#6366F1",
+      "primary_hover": "#818CF8",
+      "success": "#10B981",
+      "danger": "#F43F5E",
+      "warning": "#F59E0B"
+    }
+  },
+  "spacing_and_layout": {
+    "philosophy": "Generous Spacing + Control Room Grid for dashboards.",
+    "dashboard_grid": "grid grid-cols-1 md:grid-cols-3 lg:grid-cols-4 gap-6",
+    "card_padding": "p-6 sm:p-8",
+    "section_spacing": "py-12 sm:py-20",
+    "container": "max-w-7xl mx-auto px-4 sm:px-6 lg:px-8",
+    "border_radius": "rounded-xl"
+  },
+  "components": {
+    "cards": {
+      "style": "Glassmorphism with 1px border. backdrop-blur-xl bg-slate-900/60 border border-white/10 shadow-[0_8px_32px_rgba(0,0,0,0.12)]",
+      "hover": "hover:bg-slate-800/80 hover:border-indigo-500/30 transition-all duration-300"
+    },
+    "buttons": {
+      "primary": "bg-indigo-600 hover:bg-indigo-500 text-white font-medium px-6 py-2.5 rounded-lg transition-colors shadow-lg shadow-indigo-500/20",
+      "secondary": "bg-slate-800/50 hover:bg-slate-700/50 border border-slate-700 text-slate-200 px-6 py-2.5 rounded-lg transition-colors",
+      "ghost": "hover:bg-slate-800 text-slate-300 hover:text-white px-4 py-2 rounded-lg transition-colors"
+    },
+    "inputs": {
+      "style": "bg-slate-900/50 border border-slate-700 rounded-lg px-4 py-2.5 text-slate-100 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition-all"
+    },
+    "tables": {
+      "container": "w-full overflow-x-auto rounded-xl border border-white/10 bg-slate-900/40 backdrop-blur-md",
+      "header": "bg-slate-800/50 text-slate-300 text-sm font-medium border-b border-white/10",
+      "row": "border-b border-white/5 hover:bg-slate-800/30 transition-colors text-sm",
+      "cell": "py-4 px-6 text-slate-300 tabular-nums"
+    },
+    "charts": {
+      "library": "recharts",
+      "guidelines": "Use #6366F1 for primary metrics, #10B981 for revenue, #F43F5E for expenses. Tooltips must have glassmorphism background (#0B0F19/90) with border-white/10. Grid lines should be #1E293B. Hide axes lines."
+    }
+  },
+  "pages": {
+    "login": {
+      "layout": "Split screen or centered glass card. Use animated mesh gradient in background.",
+      "visuals": "Abstract dark slate indigo swirls image in background with bg-black/60 overlay to ensure contrast."
+    },
+    "dashboard": {
+      "layout": "Control Room Grid (1-3-4 columns). Top row: 4 KPI cards. Middle: Revenue vs Expense Chart (col-span-3) + Health Alerts (col-span-1). Bottom: Recent transactions table.",
+      "kpi_cards": "Must include value, trend (green/red indicator), and subtle sparkline."
+    },
+    "transactions": {
+      "layout": "Full width table with sticky header. AI classify button prominent at top right.",
+      "features": "Status badges for classification (e.g. 'AI Classified' - Indigo badge). Expense amounts in Rose, Income in Emerald."
+    },
+    "journals": {
+      "layout": "Chronological list or table. Clear separation of Debits and Credits using alignment (Debits left, Credits slightly indented) and subtle color cues."
+    },
+    "assets": {
+      "layout": "Grid of asset cards or dense table. Highlight depreciation values and net book value."
+    },
+    "reconciliation": {
+      "layout": "Split-pane layout. Bank statement on left, Book on right. Interactive match buttons in between."
+    },
+    "reports": {
+      "layout": "Swiss & High-Contrast density. Heavy use of IBM Plex Mono for figures to ensure vertical alignment of decimals.",
+      "structure": "Hierarchical tables with bold totals and overlines."
+    }
+  },
+  "animations": {
+    "micro_interactions": "Hover states on all rows and cards. Subtle scale transformations.",
+    "login_gradient": "Slow pan of abstract background with pulsing indigo overlay."
+  },
+  "media": {
+    "login_background": {
+      "url": "https://images.unsplash.com/photo-1641455520741-f64330a4927f",
+      "description": "A blue and black background with swirls, perfect for an animated login background."
+    },
+    "glass_texture": {
+      "url": "https://images.pexels.com/photos/7630006/pexels-photo-7630006.jpeg",
+      "description": "An abstract dark blue textured background with blurred elements."
+    }
+  },
+  "icons": {
+    "library": "lucide-react",
+    "stroke_width": 1.5,
+    "size": "w-5 h-5"
+  },
+  "accessibility_and_testing": {
+    "contrast": "Ensure all text meets APCA/WCAG standards against #0B0F19. Use text-slate-50 for high emphasis.",
+    "testing_attributes": "All interactive elements MUST include data-testid attributes (e.g., data-testid='login-submit-btn', data-testid='upload-csv-btn', data-testid='ai-classify-btn')."
+  },
+  "instructions_to_main_agent": [
+    "Install and use 'lucide-react' for all icons.",
+    "Install and use 'recharts' for all financial charts (Revenue vs Expense, Cashflow, Asset Depreciation).",
+    "Use framer-motion for the animated gradient on the /login page.",
+    "Substitute the user-requested 'Inter' font with 'Work Sans' for headings and 'IBM Plex Sans' for body text, as Inter is overused and banned by the E1 Persona.",
+    "Enforce glassmorphism using 'backdrop-blur-xl bg-slate-900/60 border border-white/10' for cards, sidebars, and sticky headers.",
+    "Format all currencies in INR (₹) using 'en-IN' locale string formatting.",
+    "Ensure the dashboard uses the 'Control Room Grid' strategy (tight gaps, fully utilized space).",
+    "Do NOT use pure black (#000000) or generic Vercel styling. Stick strictly to the Slate/Indigo dark palette defined.",
+    "Add 'data-testid' to all buttons, links, and major components for automated testing.",
+    "All monetary values should use tabular nums (e.g. tabular-nums utility in Tailwind) to align decimals perfectly in tables."
+  ]
+}
